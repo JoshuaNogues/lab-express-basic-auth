@@ -1,19 +1,26 @@
 var express = require('express');
 var router = express.Router();
 
-const User = require('../models/User.model')
+
 const bcryptjs = require('bcryptjs');
 const saltRounds = 10;
 
+const User = require('../models/User.model')
+const {isLoggedIn} = require('../middleware/route-guard.js');
+
 /* GET users listing. */
+router.get('/', (req, res, next) => {
+  res.send("respond with a resource")
+})
+
 router.get('/signup', function(req, res, next) {
   res.render('auth/signup.hbs');
 });
 
 router.post('/signup', (req, res, next) => {
-  console.log('The form data: ', req.body);
+  console.log("The form data:", req.body)
 
-  const { username, email, password } = req.body;
+  const { username, password } = req.body;
  
   bcryptjs
     .genSalt(saltRounds)
@@ -22,17 +29,69 @@ router.post('/signup', (req, res, next) => {
     })
     .then((hashedPassword) => {
       return User.create({
-        // username: username
         username,
-        email,
         passwordHash: hashedPassword
       });
     })
-    .then((userFromDB) => {
-      console.log('Newly created user is: ', userFromDB);
+    .then((createdUser) => {
+      console.log('Newly created user is: ', createdUser);
+      res.redirect("/users/login")
     })
     .catch(error => next(error));
 
+
+})
+
+router.get('/profile', (req, res, next) => {
+  user = req.session.user
+  res.render('users/user-profile.hbs', {user})
+  })
+
+  router.get('/login', (req, res, next) => {
+    res.render('auth/login.hbs')
+  })
+  
+  router.post('/login', (req, res, next) => {
+    const { username, password } = req.body;
+   
+    if (!username || !password) {
+      res.render('auth/login.hbs', {
+        errorMessage: 'Please enter both, username and password to login.'
+      });
+      return;
+    }
+   
+    User.findOne({ username })
+      .then(user => {
+        if (!user) {
+          res.render('auth/login', { errorMessage: 'Email is not registered. Try with other email.' });
+          return;
+        } else if (bcryptjs.compareSync(password, user.passwordHash)) {
+          req.session.user = user
+          console.log('SESSION =====> ', req.session);
+          res.redirect('/users/profile');
+        } else {
+          res.render('auth/login', { errorMessage: 'Incorrect password.' });
+        }
+      })
+      .catch(error => next(error));
+  });
+
+router.get('/logout', (req, res ,next) => {
+  req.session.destroy(err => {
+    if (err) next(err);
+    res.redirect('/');
+  });
+})
+
+router.get('/main', isLoggedIn, (req, res, next) => {
+  user = req.session.user
+  res.render('users/main.hbs', {user})
+})
+
+router.get('/private', isLoggedIn, (req, res, next) => {
+  user = req.session.user
+  res.render('users/private.hbs', {user})
 })
 
 module.exports = router;
